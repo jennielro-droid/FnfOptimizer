@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FNF Spritesheet Optimizer</title>
+
+<style id="theme">
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: #111;
+    color: #fff;
+    text-align: center;
+    padding: 20px;
+}
+.container {
+    max-width: 900px;
+    margin: auto;
+    background: #1b1b1b;
+    padding: 20px;
+    border-radius: 10px;
+}
+button {
+    padding: 10px 20px;
+    background: #ff3c3c;
+    border: none;
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 6px;
+    margin: 10px;
+}
+button:hover {
+    background: #ff5a5a;
+}
+canvas {
+    max-width: 100%;
+    border: 1px solid #333;
+    margin-top: 10px;
+}
+</style>
+
+</head>
+<body>
+
+<h1>FNF Spritesheet Optimizer</h1>
+<p>PNG + XML Divider (Perfect for PC Optimizers)</p>
+
+<div class="container">
+
+    <!-- 1st OPTION -->
+    <p><b>1. Choose PNG</b></p>
+    <input type="file" id="pngUpload" accept="image/png">
+
+    <!-- 2nd OPTION -->
+    <p><b>2. Choose XML</b></p>
+    <input type="file" id="xmlUpload" accept=".xml">
+
+    <p>
+        Scale (0.5 = divide by 2)
+        <input type="range" id="scale" min="0.25" max="1" step="0.05" value="1">
+        <span id="scaleValue">1</span>
+    </p>
+
+    <button onclick="optimize()">Download All as ZIP</button>
+    <button onclick="toggleTheme()">Dark / Light Mode</button>
+
+    <canvas id="canvas"></canvas>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+const canvas = document.getElementById('canvas')
+const ctx = canvas.getContext('2d')
+const scaleSlider = document.getElementById('scale')
+const scaleValue = document.getElementById('scaleValue')
+scaleSlider.oninput = () => scaleValue.textContent = scaleSlider.value
+
+let img = new Image()
+let xmlText = ""
+let charName = "character"
+let dark = true
+
+document.getElementById('pngUpload').onchange = e => {
+    const file = e.target.files[0]
+    if (!file) return
+    charName = file.name.replace(".png", "")
+    const reader = new FileReader()
+    reader.onload = () => img.src = reader.result
+    reader.readAsDataURL(file)
+}
+
+document.getElementById('xmlUpload').onchange = e => {
+    const file = e.target.files[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => xmlText = reader.result
+    reader.readAsText(file)
+}
+
+async function optimize() {
+    if (!img.src || !xmlText) {
+        alert("Please upload BOTH PNG and XML");
+        return;
+    }
+
+    const scale = parseFloat(scaleSlider.value);
+    canvas.width = Math.round(img.width * scale);
+    canvas.height = Math.round(img.height * scale);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    const pngBlob = await new Promise(resolve =>
+        canvas.toBlob(resolve, "image/png")
+    );
+
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(xmlText, "application/xml");
+
+    if (xml.querySelector("parsererror")) {
+        alert("The XML file could not be read.");
+        return;
+    }
+
+    const subs = xml.getElementsByTagName("SubTexture");
+    for (let s of subs) {
+        ["x","y","width","height","frameX","frameY","frameWidth","frameHeight"].forEach(attr => {
+            if (s.hasAttribute(attr)) {
+                const v = parseInt(s.getAttribute(attr));
+                if (!isNaN(v)) s.setAttribute(attr, Math.round(v * scale));
+            }
+        });
+    }
+
+    const outXML = new XMLSerializer().serializeToString(xml);
+
+    const zip = new JSZip();
+    zip.file(charName + ".png", pngBlob);
+    zip.file(charName + ".xml", outXML);
+
+    const zipBlob = await zip.generateAsync({type:"blob"});
+
+    const link = document.createElement("a");
+    link.download = charName + "-optimized.zip";
+    link.href = URL.createObjectURL(zipBlob);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    setTimeout(() => URL.revokeObjectURL(link.href), 5000);
+}
+function toggleTheme() {
+    dark = !dark
+    document.getElementById("theme").textContent = dark ? `
+        body{background:#111;color:#fff}
+        .container{background:#1b1b1b}
+        button{background:#ff3c3c;color:#fff}
+    ` : `
+        body{background:#f2f2f2;color:#000}
+        .container{background:#fff}
+        button{background:#333;color:#fff}
+    `
+}
+</script>
+
+</body>
+</html>
